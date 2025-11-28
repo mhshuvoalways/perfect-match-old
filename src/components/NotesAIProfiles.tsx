@@ -288,7 +288,7 @@ const NotesAIProfiles = () => {
                   <option value="">Select a resume...</option>
                   {resumeItems.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.uploaded_by} -{" "}
+                      {item.parsed_data?.name || item.uploaded_by} -{" "}
                       {new Date(item.created_at).toLocaleDateString()}
                     </option>
                   ))}

@@ -137,7 +137,7 @@ Write this as a flowing narrative profile (3-4 paragraphs) that a shadchan would
   } catch (error) {
     console.error('Error in generate-ai-profile function:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : String(error) }),
       {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

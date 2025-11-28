@@ -1,4 +1,3 @@
-import AddFamilyForm from "@/components/AddFamilyForm";
 import AddSuggestionForm from "@/components/AddSuggestionForm";
 import ShadchanSuggestionCard from "@/components/ShadchanSuggestionCard";
 import NotesAIProfiles from "@/components/NotesAIProfiles";
@@ -15,10 +14,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { useShadchan } from "@/hooks/useShadchan";
 import { useCollaboration } from "@/hooks/useCollaboration";
 import { usePremium } from "@/hooks/usePremium";
+import { useResumeForm } from "@/hooks/useResumeForm";
 import {
   Calendar,
   Crown,
@@ -34,11 +35,13 @@ import {
   Eye,
   Edit,
   Send,
-  DollarSign,
+  Download,
+  Save,
+  RotateCcw,
   Filter,
   X,
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -52,8 +55,6 @@ const ShadchanDashboard = () => {
     suggestions,
     notes,
     isLoading,
-    addFamily,
-    deleteFamily,
     addSuggestion,
     deleteSuggestion,
     updateSuggestionStatus,
@@ -63,6 +64,21 @@ const ShadchanDashboard = () => {
     getSuggestionStatusColor,
     getSuggestionStatusLabel,
   } = useShadchan();
+
+  const {
+    resumeData,
+    resumes,
+    isLoading: resumeLoading,
+    isUploading,
+    handleInputChange,
+    handlePhotoUpload,
+    saveResume,
+    loadResumes,
+    selectResume,
+    deleteResume,
+    clearResume,
+    handleDownloadPDF,
+  } = useResumeForm();
 
   const {
     sentCollaborations,
@@ -75,36 +91,20 @@ const ShadchanDashboard = () => {
 
   const { isPremium, isLoading: premiumLoading } = usePremium();
 
-  const [showAddFamily, setShowAddFamily] = useState(false);
   const [showAddSuggestion, setShowAddSuggestion] = useState(false);
   const [shareModal, setShareModal] = useState<{
     isOpen: boolean;
     resumeId: string;
     resumeName: string;
   }>({ isOpen: false, resumeId: "", resumeName: "" });
-  
-  // Filter states
-  const [filters, setFilters] = useState({
-    search: "",
-    gender: "all",
-    ageRange: "all",
-    location: "",
-    occupation: "",
-    background: "",
-    hashkafa: "",
-    status: "all"
-  });
-  const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    loadResumes();
+  }, []);
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/");
-  };
-
-  const handleDeleteFamily = (familyId: string) => {
-    if (confirm('Are you sure you want to delete this family? This action cannot be undone.')) {
-      deleteFamily(familyId);
-    }
   };
 
   const handleShareProfile = (resumeId: string, resumeName: string) => {
@@ -115,54 +115,7 @@ const ShadchanDashboard = () => {
     loadCollaborations();
   };
 
-  // Filter families based on current filters
-  const filteredFamilies = useMemo(() => {
-    return families.filter(family => {
-      if (filters.search && !family.childName.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
-      }
-      if (filters.gender !== "all" && family.gender !== filters.gender) {
-        return false;
-      }
-      if (filters.ageRange !== "all") {
-        const [min, max] = filters.ageRange.split('-').map(Number);
-        if (family.age < min || family.age > max) {
-          return false;
-        }
-      }
-      if (filters.location && !family.location.toLowerCase().includes(filters.location.toLowerCase())) {
-        return false;
-      }
-      if (filters.occupation && !family.occupation.toLowerCase().includes(filters.occupation.toLowerCase())) {
-        return false;
-      }
-      if (filters.background && !family.background.toLowerCase().includes(filters.background.toLowerCase())) {
-        return false;
-      }
-      if (filters.hashkafa && !family.hashkafa.toLowerCase().includes(filters.hashkafa.toLowerCase())) {
-        return false;
-      }
-      if (filters.status !== "all" && family.status !== filters.status) {
-        return false;
-      }
-      return true;
-    });
-  }, [families, filters]);
-
-  const clearFilters = () => {
-    setFilters({
-      search: "",
-      gender: "all",
-      ageRange: "all",
-      location: "",
-      occupation: "",
-      background: "",
-      hashkafa: "",
-      status: "all"
-    });
-  };
-
-  if (isLoading) {
+  if (isLoading || resumeLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -208,8 +161,12 @@ const ShadchanDashboard = () => {
           </p>
         </div>
 
-        <Tabs defaultValue="suggestions" className="space-y-6">
+        <Tabs defaultValue="resume" className="space-y-6">
           <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="resume" className="flex items-center space-x-2">
+              <User className="h-4 w-4" />
+              <span>Resume Builder</span>
+            </TabsTrigger>
             <TabsTrigger
               value="suggestions"
               className="flex items-center space-x-2"
@@ -217,18 +174,360 @@ const ShadchanDashboard = () => {
               <Heart className="h-4 w-4" />
               <span>Suggestions</span>
             </TabsTrigger>
-            <TabsTrigger value="families">Single</TabsTrigger>
             <TabsTrigger value="notes">Notes & AI Profiles</TabsTrigger>
             <TabsTrigger value="collaborate">Collaborate</TabsTrigger>
             <TabsTrigger value="payments">Payments</TabsTrigger>
           </TabsList>
+
+          {/* Resume Builder Tab */}
+          <TabsContent value="resume">
+            <div className="space-y-6">
+              {/* Resume List */}
+              {resumes.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      My Singles' Resumes ({resumes.length})
+                    </CardTitle>
+                    <CardDescription>
+                      Click on a resume to edit it, or create a new one below.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {resumes.map((resume) => (
+                        <Card
+                          key={resume.id}
+                          className={`cursor-pointer transition-colors ${
+                            resumeData.id === resume.id
+                              ? "ring-2 ring-green-500"
+                              : "hover:bg-gray-50"
+                          }`}
+                          onClick={() => selectResume(resume)}
+                        >
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-start gap-3 flex-1">
+                                {resume.photo_url && (
+                                  <img
+                                    src={resume.photo_url}
+                                    alt={resume.name}
+                                    className="w-16 h-16 rounded-full object-cover"
+                                  />
+                                )}
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900">
+                                    {resume.name}
+                                  </h3>
+                                  <p className="text-sm text-gray-600">
+                                    {resume.age} years old • {resume.location}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {resume.occupation || "No occupation listed"}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (
+                                    resume.id &&
+                                    confirm(
+                                      "Are you sure you want to delete this resume?"
+                                    )
+                                  ) {
+                                    deleteResume(resume.id);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-500" />
+                              </Button>
+                            </div>
+                            <div className="flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadPDF(resume);
+                                }}
+                                className="flex-1"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (resume.id) {
+                                    handleShareProfile(resume.id, resume.name);
+                                  }
+                                }}
+                                className="flex-1 text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
+                              >
+                                <Share2 className="h-4 w-4 mr-1" />
+                                Share
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Resume Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <User className="h-5 w-5 text-green-600" />
+                    <span>
+                      {resumeData.id ? "Edit Resume" : "Create New Resume"}
+                    </span>
+                  </CardTitle>
+                  <CardDescription>
+                    {resumeData.id
+                      ? "Update the selected resume"
+                      : "Create a comprehensive profile using our guided form."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {/* Basic Information */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Basic Information
+                      </h3>
+
+                      <div>
+                        <Label htmlFor="photo">Profile Photo</Label>
+                        <div className="mt-2 flex items-center gap-4">
+                          {resumeData.photo_url && (
+                            <img
+                              src={resumeData.photo_url}
+                              alt="Profile"
+                              className="w-20 h-20 rounded-full object-cover"
+                            />
+                          )}
+                          <Input
+                            id="photo"
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const url = await handlePhotoUpload(file);
+                                if (url) {
+                                  handleInputChange("photo_url", url);
+                                }
+                              }
+                            }}
+                            disabled={isUploading}
+                            className="flex-1"
+                          />
+                        </div>
+                        {isUploading && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            Uploading photo...
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <Label htmlFor="name">Full Name *</Label>
+                        <Input
+                          id="name"
+                          value={resumeData.name}
+                          onChange={(e) =>
+                            handleInputChange("name", e.target.value)
+                          }
+                          placeholder="Enter full name"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="age">Age *</Label>
+                        <Input
+                          id="age"
+                          type="number"
+                          value={resumeData.age}
+                          onChange={(e) =>
+                            handleInputChange("age", e.target.value)
+                          }
+                          placeholder="Enter age"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="location">Location *</Label>
+                        <Input
+                          id="location"
+                          value={resumeData.location}
+                          onChange={(e) =>
+                            handleInputChange("location", e.target.value)
+                          }
+                          placeholder="City, State/Country"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="occupation">Occupation</Label>
+                        <Input
+                          id="occupation"
+                          value={resumeData.occupation}
+                          onChange={(e) =>
+                            handleInputChange("occupation", e.target.value)
+                          }
+                          placeholder="Current job or profession"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="gender">Gender</Label>
+                        <Input
+                          id="gender"
+                          value={resumeData.gender || ""}
+                          onChange={(e) =>
+                            handleInputChange("gender", e.target.value)
+                          }
+                          placeholder="Male/Female"
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Additional Information */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Additional Details
+                      </h3>
+
+                      <div>
+                        <Label htmlFor="education">Education</Label>
+                        <Input
+                          id="education"
+                          value={resumeData.education}
+                          onChange={(e) =>
+                            handleInputChange("education", e.target.value)
+                          }
+                          placeholder="School, degree, etc."
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="hashkafa">
+                          Hashkafa/Religious Level
+                        </Label>
+                        <Input
+                          id="hashkafa"
+                          value={resumeData.hashkafa || ""}
+                          onChange={(e) =>
+                            handleInputChange("hashkafa", e.target.value)
+                          }
+                          placeholder="Orthodox, Modern Orthodox, etc."
+                          className="mt-1"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="background">Background & Values</Label>
+                        <Textarea
+                          id="background"
+                          value={resumeData.background}
+                          onChange={(e) =>
+                            handleInputChange("background", e.target.value)
+                          }
+                          placeholder="Religious background, family values, community involvement..."
+                          className="mt-1 min-h-[100px]"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="looking_for">
+                          What We're Looking For
+                        </Label>
+                        <Textarea
+                          id="looking_for"
+                          value={resumeData.looking_for}
+                          onChange={(e) =>
+                            handleInputChange("looking_for", e.target.value)
+                          }
+                          placeholder="Describe the type of person and family you're seeking..."
+                          className="mt-1 min-h-[100px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="additional_info">
+                      Additional Information
+                    </Label>
+                    <Textarea
+                      id="additional_info"
+                      value={resumeData.additional_info}
+                      onChange={(e) =>
+                        handleInputChange("additional_info", e.target.value)
+                      }
+                      placeholder="Any other important details, hobbies, personality traits, etc."
+                      className="mt-1 min-h-[120px]"
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 pt-4">
+                    <Button
+                      onClick={saveResume}
+                      disabled={resumeLoading}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {resumeLoading
+                        ? "Saving..."
+                        : resumeData.id
+                        ? "Update Resume"
+                        : "Save Resume"}
+                    </Button>
+                    <Button variant="outline" onClick={clearResume}>
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Clear Form
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
 
           {/* Suggestions Tab */}
           <TabsContent value="suggestions">
             <div className="space-y-6">
               {showAddSuggestion && (
                 <AddSuggestionForm
-                  families={families}
+                  families={resumes.map(r => ({
+                    id: r.id || "",
+                    childName: r.name,
+                    parentName: "Shadchan",
+                    parentId: "",
+                    age: parseInt(r.age) || 0,
+                    gender: r.gender || "",
+                    location: r.location,
+                    occupation: r.occupation,
+                    education: r.education,
+                    background: r.background,
+                    hashkafa: r.hashkafa || "",
+                    lookingFor: r.looking_for,
+                    status: "active" as const,
+                    dateAdded: new Date().toISOString(),
+                  }))}
                   onAddSuggestion={addSuggestion}
                   onCancel={() => setShowAddSuggestion(false)}
                 />
@@ -249,7 +548,7 @@ const ShadchanDashboard = () => {
                     <Button
                       onClick={() => setShowAddSuggestion(true)}
                       className="bg-green-600 hover:bg-green-700"
-                      disabled={families.length < 2}
+                      disabled={resumes.length < 2}
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Add Suggestion
@@ -257,14 +556,14 @@ const ShadchanDashboard = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {families.length < 2 ? (
+                  {resumes.length < 2 ? (
                     <div className="text-center py-12">
                       <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                       <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                        Add more families
+                        Add more resumes
                       </h3>
                       <p className="text-gray-500 mb-4">
-                        You need at least 2 families to create suggestions.
+                        You need at least 2 resumes to create suggestions.
                       </p>
                     </div>
                   ) : suggestions.length > 0 ? (
@@ -293,271 +592,10 @@ const ShadchanDashboard = () => {
                       <Button
                         onClick={() => setShowAddSuggestion(true)}
                         className="bg-green-600 hover:bg-green-700"
-                        disabled={families.length < 2}
+                        disabled={resumes.length < 2}
                       >
                         <Plus className="h-4 w-4 mr-2" />
                         Add First Suggestion
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          {/* Families Tab */}
-          <TabsContent value="families">
-            <div className="space-y-6">
-              {showAddFamily && (
-                <AddFamilyForm
-                  onAddFamily={addFamily}
-                  onCancel={() => setShowAddFamily(false)}
-                />
-              )}
-
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="flex items-center space-x-2">
-                        <Users className="h-5 w-5 text-blue-600" />
-                        <span>Single ({filteredFamilies.length})</span>
-                      </CardTitle>
-                      <CardDescription>
-                        Singles you've added to the system. Click the share button to collaborate with other shadchanim.
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => setShowFilters(!showFilters)}
-                        className="flex items-center gap-2"
-                      >
-                        <Filter className="h-4 w-4" />
-                        Filters
-                      </Button>
-                      <Button
-                        onClick={() => setShowAddFamily(true)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Single
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Filter Panel */}
-                  {showFilters && (
-                    <div className="mb-6 p-4 border rounded-lg bg-gray-50 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-gray-900">Filter Singles</h3>
-                        <div className="flex items-center gap-2">
-                          <Button variant="outline" size="sm" onClick={clearFilters}>
-                            Clear All
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setShowFilters(false)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="search">Search Name</Label>
-                          <Input
-                            id="search"
-                            placeholder="Search by name..."
-                            value={filters.search}
-                            onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="gender">Gender</Label>
-                          <Select value={filters.gender} onValueChange={(value) => setFilters(prev => ({ ...prev, gender: value }))}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select gender" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All</SelectItem>
-                              <SelectItem value="male">Male</SelectItem>
-                              <SelectItem value="female">Female</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="ageRange">Age Range</Label>
-                          <Select value={filters.ageRange} onValueChange={(value) => setFilters(prev => ({ ...prev, ageRange: value }))}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select age range" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Ages</SelectItem>
-                              <SelectItem value="18-25">18-25</SelectItem>
-                              <SelectItem value="26-30">26-30</SelectItem>
-                              <SelectItem value="31-35">31-35</SelectItem>
-                              <SelectItem value="36-40">36-40</SelectItem>
-                              <SelectItem value="41-50">41-50</SelectItem>
-                              <SelectItem value="51-100">51+</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="location">Location</Label>
-                          <Input
-                            id="location"
-                            placeholder="Filter by location..."
-                            value={filters.location}
-                            onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="occupation">Occupation</Label>
-                          <Input
-                            id="occupation"
-                            placeholder="Filter by occupation..."
-                            value={filters.occupation}
-                            onChange={(e) => setFilters(prev => ({ ...prev, occupation: e.target.value }))}
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="background">Background</Label>
-                          <Input
-                            id="background"
-                            placeholder="Filter by background..."
-                            value={filters.background}
-                            onChange={(e) => setFilters(prev => ({ ...prev, background: e.target.value }))}
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="hashkafa">Hashkafa</Label>
-                          <Input
-                            id="hashkafa"
-                            placeholder="Filter by hashkafa..."
-                            value={filters.hashkafa}
-                            onChange={(e) => setFilters(prev => ({ ...prev, hashkafa: e.target.value }))}
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="status">Status</Label>
-                          <Select value={filters.status} onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="all">All Status</SelectItem>
-                              <SelectItem value="active">Active</SelectItem>
-                              <SelectItem value="paused">Paused</SelectItem>
-                              <SelectItem value="matched">Matched</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {filteredFamilies.length > 0 ? (
-                    <div className="space-y-4">
-                      {filteredFamilies.map((family) => (
-                        <Card key={family.id} className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                                {family.childName}
-                              </h3>
-                              <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-2">
-                                <div className="flex items-center">
-                                  <User className="h-4 w-4 mr-1" />
-                                  {family.age} years old • {family.gender}
-                                </div>
-                                <div className="flex items-center">
-                                  <Calendar className="h-4 w-4 mr-1" />
-                                  Added{" "}
-                                  {new Date(
-                                    family.dateAdded
-                                  ).toLocaleDateString()}
-                                </div>
-                              </div>
-                              <p className="text-sm text-gray-600 mb-2">
-                                <strong>Location:</strong> {family.location}
-                              </p>
-                              <p className="text-sm text-gray-600 mb-2">
-                                <strong>Occupation:</strong> {family.occupation}
-                              </p>
-                              <p className="text-sm text-gray-600 mb-2">
-                                <strong>Background:</strong> {family.background}
-                              </p>
-                              <p className="text-sm text-gray-500">
-                                <strong>Looking for:</strong> {family.lookingFor}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge
-                                className={
-                                  family.status === "active"
-                                    ? "bg-green-100 text-green-800"
-                                    : family.status === "paused"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : "bg-blue-100 text-blue-800"
-                                }
-                              >
-                                {family.status}
-                              </Badge>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleShareProfile(family.id, family.childName)}
-                                className="text-purple-600 hover:text-purple-700 border-purple-200 hover:border-purple-300"
-                              >
-                                <Share2 className="h-4 w-4 mr-1" />
-                                Share
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                onClick={() => handleDeleteFamily(family.id)}
-                              >
-                                <Trash2 className="h-4 w-4 text-red-500" />
-                              </Button>
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : families.length === 0 ? (
-                    <div className="text-center py-12">
-                      <Users className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                        No singles yet
-                      </h3>
-                      <p className="text-gray-500 mb-4">
-                        Add singles to start making match suggestions and collaborating with other shadchanim.
-                      </p>
-                      <Button
-                        onClick={() => setShowAddFamily(true)}
-                        className="bg-blue-600 hover:bg-blue-700"
-                      >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add First Single
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="text-center py-12">
-                      <Filter className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-700 mb-2">
-                        No singles match your filters
-                      </h3>
-                      <p className="text-gray-500 mb-4">
-                        Try adjusting your filters to see more results.
-                      </p>
-                      <Button variant="outline" onClick={clearFilters}>
-                        Clear Filters
                       </Button>
                     </div>
                   )}

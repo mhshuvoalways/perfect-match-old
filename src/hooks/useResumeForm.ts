@@ -15,6 +15,7 @@ export interface ResumeData {
   additional_info: string;
   gender?: string;
   hashkafa?: string;
+  photo_url?: string;
 }
 
 const initialResumeData: ResumeData = {
@@ -28,12 +29,14 @@ const initialResumeData: ResumeData = {
   additional_info: "",
   gender: "",
   hashkafa: "",
+  photo_url: "",
 };
 
 export const useResumeForm = () => {
   const [resumeData, setResumeData] = useState<ResumeData>(initialResumeData);
   const [resumes, setResumes] = useState<ResumeData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -42,6 +45,41 @@ export const useResumeForm = () => {
       ...prev,
       [field]: value,
     }));
+  };
+
+  const handlePhotoUpload = async (file: File): Promise<string | null> => {
+    if (!user) return null;
+
+    setIsUploading(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `${user.id}/${Math.random()}.${fileExt}`;
+      const filePath = fileName;
+
+      const { error: uploadError } = await supabase.storage
+        .from("resumes")
+        .upload(filePath, file, {
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("resumes")
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (error) {
+      console.error("Error uploading photo:", error);
+      toast({
+        title: "Upload Error",
+        description: "Failed to upload photo",
+        variant: "destructive",
+      });
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const validateForm = (): boolean => {
@@ -87,6 +125,7 @@ export const useResumeForm = () => {
         background: resumeData.background || null,
         gender: resumeData.gender || null,
         hashkafa: resumeData.hashkafa || null,
+        photo_url: resumeData.photo_url || null,
         family_info: {
           looking_for: resumeData.looking_for,
           additional_info: resumeData.additional_info,
@@ -162,6 +201,7 @@ export const useResumeForm = () => {
           additional_info: resume.family_info?.additional_info || "",
           gender: resume.gender || "",
           hashkafa: resume.hashkafa || "",
+          photo_url: resume.photo_url || "",
         }));
 
         setResumes(formattedResumes);
@@ -332,7 +372,9 @@ export const useResumeForm = () => {
     resumeData,
     resumes,
     isLoading,
+    isUploading,
     handleInputChange,
+    handlePhotoUpload,
     saveResume,
     loadResumes,
     selectResume,

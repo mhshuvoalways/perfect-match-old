@@ -41,7 +41,9 @@ const ParentDashboard = () => {
     resumeData,
     resumes,
     isLoading,
+    isUploading,
     handleInputChange,
+    handlePhotoUpload,
     saveResume,
     loadResumes,
     selectResume,
@@ -166,16 +168,25 @@ const ParentDashboard = () => {
                         >
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between mb-3">
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-gray-900">
-                                  {resume.name}
-                                </h3>
-                                <p className="text-sm text-gray-600">
-                                  {resume.age} years old • {resume.location}
-                                </p>
-                                <p className="text-xs text-gray-500 mt-1">
-                                  {resume.occupation || "No occupation listed"}
-                                </p>
+                              <div className="flex items-start gap-3 flex-1">
+                                {resume.photo_url && (
+                                  <img
+                                    src={resume.photo_url}
+                                    alt={resume.name}
+                                    className="w-16 h-16 rounded-full object-cover"
+                                  />
+                                )}
+                                <div className="flex-1">
+                                  <h3 className="font-semibold text-gray-900">
+                                    {resume.name}
+                                  </h3>
+                                  <p className="text-sm text-gray-600">
+                                    {resume.age} years old • {resume.location}
+                                  </p>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {resume.occupation || "No occupation listed"}
+                                  </p>
+                                </div>
                               </div>
                               <Button
                                 variant="ghost"
@@ -239,6 +250,40 @@ const ParentDashboard = () => {
                       <h3 className="text-lg font-semibold text-gray-900">
                         Basic Information
                       </h3>
+
+                      <div>
+                        <Label htmlFor="photo">Profile Photo</Label>
+                        <div className="mt-2 flex items-center gap-4">
+                          {resumeData.photo_url && (
+                            <img
+                              src={resumeData.photo_url}
+                              alt="Profile"
+                              className="w-20 h-20 rounded-full object-cover"
+                            />
+                          )}
+                          <Input
+                            id="photo"
+                            type="file"
+                            accept="image/*"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const url = await handlePhotoUpload(file);
+                                if (url) {
+                                  handleInputChange("photo_url", url);
+                                }
+                              }
+                            }}
+                            disabled={isUploading}
+                            className="flex-1"
+                          />
+                        </div>
+                        {isUploading && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            Uploading photo...
+                          </p>
+                        )}
+                      </div>
 
                       <div>
                         <Label htmlFor="name">Full Name *</Label>
